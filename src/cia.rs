@@ -5,6 +5,8 @@ pub struct CiaSnapshot {
     pub timer_b: u16,
     pub timer_a_running: bool,
     pub timer_b_running: bool,
+    pub interrupt_mask: u8,
+    pub irq_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +18,8 @@ pub struct Cia6526 {
     timer_b_counter: u16,
     timer_a_running: bool,
     timer_b_running: bool,
+    interrupt_mask: u8,
+    irq_pending: bool,
     total_cycles: u64,
 }
 
@@ -29,6 +33,8 @@ impl Default for Cia6526 {
             timer_b_counter: 0,
             timer_a_running: false,
             timer_b_running: false,
+            interrupt_mask: 0,
+            irq_pending: false,
             total_cycles: 0,
         }
     }
@@ -45,13 +51,29 @@ impl Cia6526 {
             0x05 => (self.timer_a_counter >> 8) as u8,
             0x06 => self.timer_b_counter as u8,
             0x07 => (self.timer_b_counter >> 8) as u8,
+            0x0D => self.registers[0x0D] | if self.irq_pending { 0x80 } else { 0x00 },
             index => self.registers[index],
         }
     }
 
+    pub fn read_mut(&mut self, addr: u16) -> u8 {
+        let index = addr as usize & 0x0F;
+        let value = self.read(addr);
+
+        if index == 0x0D {
+            self.registers[0x0D] = 0;
+            self.irq_pending = false;
+        }
+
+        value
+    }
+
     pub fn write(&mut self, addr: u16, value: u8) {
         let index = addr as usize & 0x0F;
-        self.registers[index] = value;
+
+        if index != 0x0D {
+            self.registers[index] = value;
+        }
 
         match index {
             0x04 => {
@@ -76,6 +98,13 @@ impl Cia6526 {
                 self.timer_b_latch = (self.timer_b_latch & 0x00FF) | ((value as u16) << 8);
                 if !self.timer_b_running {
                     self.timer_b_counter = self.timer_b_latch;
+                }
+            }
+            0x0D => {
+                if value & 0x80 != 0 {
+                    self.interrupt_mask |= value & 0x1F;
+                } else {
+                    self.interrupt_mask &= !(value & 0x1F);
                 }
             }
             0x0E => {
@@ -110,7 +139,13 @@ impl Cia6526 {
             timer_b: self.timer_b_counter,
             timer_a_running: self.timer_a_running,
             timer_b_running: self.timer_b_running,
+            interrupt_mask: self.interrupt_mask,
+            irq_pending: self.irq_pending,
         }
+    }
+
+    pub fn irq_pending(&self) -> bool {
+        self.irq_pending
     }
 
     fn tick_timer_a(&mut self) {
@@ -120,7 +155,7 @@ impl Cia6526 {
             }
 
             if self.timer_a_counter == 0 {
-                self.registers[0x0D] |= 0x01;
+                self.raise_interrupt(0x01);
                 if self.registers[0x0E] & 0x08 != 0 {
                     self.timer_a_running = false;
                 } else {
@@ -137,13 +172,20 @@ impl Cia6526 {
             }
 
             if self.timer_b_counter == 0 {
-                self.registers[0x0D] |= 0x02;
+                self.raise_interrupt(0x02);
                 if self.registers[0x0F] & 0x08 != 0 {
                     self.timer_b_running = false;
                 } else {
                     self.timer_b_counter = self.timer_b_latch.max(1);
                 }
             }
+        }
+    }
+
+    fn raise_interrupt(&mut self, source: u8) {
+        self.registers[0x0D] |= source;
+        if self.interrupt_mask & source != 0 {
+            self.irq_pending = true;
         }
     }
 }
@@ -167,6 +209,23 @@ mod tests {
             timer_b: 0,
             timer_a_running: true,
             timer_b_running: false,
+            interrupt_mask: 0,
+            irq_pending: false,
         });
+    }
+
+    #[test]
+    fn masked_timer_a_underflow_raises_and_clears_irq() {
+        let mut cia = Cia6526::new();
+        cia.write(0xDC04, 0x01);
+        cia.write(0xDC05, 0x00);
+        cia.write(0xDC0D, 0x81);
+        cia.write(0xDC0E, 0x11);
+
+        cia.tick(1);
+
+        assert!(cia.snapshot().irq_pending);
+        assert_eq!(cia.read_mut(0xDC0D), 0x81);
+        assert!(!cia.snapshot().irq_pending);
     }
 }

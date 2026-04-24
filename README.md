@@ -4,7 +4,7 @@
 
 The current baseline focuses on the parts you need to grow a real emulator instead of starting from a monolithic prototype:
 
-- a 6510 CPU core with a broader, tested instruction set for loops, stack use, and indexed memory access
+- a 6510 CPU core with a broader, tested instruction set for loops, stack use, indirect pointers, and interrupt return
 - a C64 memory bus with ROM banking hooks plus minimal VIC-II, CIA, and SID devices
 - a machine wrapper that can load `.prg` files into RAM
 - a tiny CLI for stepping a program, mounting ROMs, and dumping CPU/video/device state
@@ -13,12 +13,12 @@ The current baseline focuses on the parts you need to grow a real emulator inste
 
 Implemented now:
 
-- `LDA`, `LDX`, `LDY` with immediate, zero-page, absolute, and selected indexed modes
-- `STA`, `STX`, `STY` with zero-page, absolute, and selected indexed modes
+- `LDA`, `LDX`, `LDY` with immediate, zero-page, absolute, indirect, and selected indexed modes
+- `STA`, `STX`, `STY` with zero-page, absolute, indirect, and selected indexed modes
 - `TAX`, `TAY`, `TXA`, `TYA`, `TSX`, `TXS`
 - `INX`, `INY`, `DEX`, `DEY`
 - `INC`, `DEC`, `ADC`, `SBC`, `AND`, `ORA`, `EOR`, `CMP`, `CPX`, `CPY`
-- `JMP`, `JSR`, `RTS`, `BEQ`, `BNE`, `BCC`, `BCS`, `BMI`, `BPL`, `BVC`, `BVS`
+- `JMP`, `JSR`, `RTS`, `RTI`, `BEQ`, `BNE`, `BCC`, `BCS`, `BMI`, `BPL`, `BVC`, `BVS`
 - `CLC`, `SEC`, `CLI`, `SEI`, `CLD`, `SED`, `CLV`, `PHA`, `PLA`, `PHP`, `PLP`, `NOP`, `BRK`
 - reset vector handling
 - BASIC, KERNAL, and character ROM slots
@@ -26,13 +26,14 @@ Implemented now:
 - VIC-II raster stepping and a text-mode screen snapshot sourced from screen RAM
 - CIA timer countdown and SID voice phase stepping tied to the same bus tick path as the VIC-II
 - ROM reset handlers that can execute directly from mapped KERNAL ROM bytes
+- CIA timer IRQ delivery into the CPU with KERNAL-side acknowledge and return via `RTI`
 
 Not implemented yet:
 
 - VIC-II timing and rendering
 - SID audio
 - CIA timers and keyboard/joystick matrix
-- interrupts, exact cycle timing, illegal opcodes, cartridges, tape, disk, and KERNAL boot flow
+- exact cycle timing, illegal opcodes, cartridges, tape, disk, and full KERNAL/BASIC boot flow
 
 ## Usage
 
@@ -60,11 +61,11 @@ Run with ROM images mounted:
 cargo run -- --kernal-rom roms/kernal.rom --basic-rom roms/basic.rom --char-rom roms/chargen.rom --steps 20000
 ```
 
-The CLI prints CPU state, the active reset vector, VIC raster position, CIA and SID timing state, a small RAM window, and the first few lines of the text screen snapshot.
+The CLI prints CPU state, the active reset vector, VIC raster position, CIA timing and IRQ state, SID phase state, a small RAM window, and the first few lines of the text screen snapshot.
 
 ## Suggested Next Milestones
 
 1. Expand opcode coverage and addressing modes until larger KERNAL and BASIC routines run without unsupported opcodes.
 2. Flesh out the VIC-II beyond raster counters and text snapshots, then add real CIA keyboard/joystick behavior and SID waveform/envelope generation.
-3. Refine the shared timing model from simple per-instruction ticking toward cycle-accurate coordination and interrupt generation.
-4. Boot through real ROMs far enough to reach a recognizable KERNAL/BASIC startup path instead of only a smoke-tested reset handler.
+3. Refine the shared timing model from simple per-instruction ticking toward cycle-accurate coordination and richer interrupt sources.
+4. Boot through real ROMs far enough to reach a recognizable KERNAL/BASIC startup path instead of only smoke-tested reset and IRQ handlers.

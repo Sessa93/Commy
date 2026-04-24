@@ -92,12 +92,24 @@ fn run() -> Result<(), Box<dyn Error>> {
     let cia2 = c64.cia2_snapshot();
     let sid = c64.sid_snapshot();
     println!(
-        "cia1: cycles={} timer_a={} timer_b={} running_a={} running_b={}",
-        cia1.total_cycles, cia1.timer_a, cia1.timer_b, cia1.timer_a_running, cia1.timer_b_running
+        "cia1: cycles={} timer_a={} timer_b={} running_a={} running_b={} irq_pending={} mask=${:02X}",
+        cia1.total_cycles,
+        cia1.timer_a,
+        cia1.timer_b,
+        cia1.timer_a_running,
+        cia1.timer_b_running,
+        cia1.irq_pending,
+        cia1.interrupt_mask
     );
     println!(
-        "cia2: cycles={} timer_a={} timer_b={} running_a={} running_b={}",
-        cia2.total_cycles, cia2.timer_a, cia2.timer_b, cia2.timer_a_running, cia2.timer_b_running
+        "cia2: cycles={} timer_a={} timer_b={} running_a={} running_b={} irq_pending={} mask=${:02X}",
+        cia2.total_cycles,
+        cia2.timer_a,
+        cia2.timer_b,
+        cia2.timer_a_running,
+        cia2.timer_b_running,
+        cia2.irq_pending,
+        cia2.interrupt_mask
     );
     println!(
         "sid: cycles={} voice_phase=[{}, {}, {}]",

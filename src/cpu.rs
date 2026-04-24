@@ -107,6 +107,11 @@ impl Cpu6510 {
             return Ok(0);
         }
 
+        if self.status & FLAG_INTERRUPT_DISABLE == 0 && bus.poll_irq() {
+            self.service_interrupt(bus, 0xFFFE, false);
+            return Ok(7);
+        }
+
         let opcode_pc = self.pc;
         let opcode = self.fetch_byte(bus);
 
@@ -150,6 +155,11 @@ impl Cpu6510 {
                 self.set_flag(FLAG_CARRY, true);
                 2
             }
+            0x40 => {
+                self.status = (self.pop(bus) | FLAG_UNUSED) & !FLAG_BREAK;
+                self.pc = self.pop_u16(bus);
+                6
+            }
             0x4C => {
                 self.pc = self.fetch_word(bus);
                 3
@@ -187,6 +197,11 @@ impl Cpu6510 {
                 self.set_flag(FLAG_INTERRUPT_DISABLE, true);
                 2
             }
+            0x81 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                bus.write(addr, self.a);
+                6
+            }
             0x85 => {
                 let addr = self.fetch_zero_page_addr(bus);
                 bus.write(addr, self.a);
@@ -218,6 +233,11 @@ impl Cpu6510 {
                 3
             }
             0x90 => self.branch(bus, self.status & FLAG_CARRY == 0),
+            0x91 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                bus.write(addr, self.a);
+                6
+            }
             0x94 => {
                 let addr = self.fetch_zero_page_x_addr(bus);
                 bus.write(addr, self.y);
@@ -261,6 +281,12 @@ impl Cpu6510 {
                 let addr = self.fetch_absolute_x_addr(bus);
                 bus.write(addr, self.a);
                 5
+            }
+            0xA1 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                self.a = bus.read(addr);
+                self.set_zn(self.a);
+                6
             }
             0xA0 => {
                 self.y = self.fetch_byte(bus);
@@ -324,6 +350,12 @@ impl Cpu6510 {
                 4
             }
             0xB0 => self.branch(bus, self.status & FLAG_CARRY != 0),
+            0xB1 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                self.a = bus.read(addr);
+                self.set_zn(self.a);
+                5
+            }
             0xB5 => {
                 let addr = self.fetch_zero_page_x_addr(bus);
                 self.a = bus.read(addr);
@@ -531,6 +563,35 @@ impl Cpu6510 {
         self.fetch_word(bus).wrapping_add(self.y as u16)
     }
 
+    fn fetch_indexed_indirect_addr<B: Bus>(&mut self, bus: &mut B) -> u16 {
+        let base = self.fetch_byte(bus).wrapping_add(self.x);
+        self.read_zero_page_u16(bus, base)
+    }
+
+    fn fetch_indirect_indexed_addr<B: Bus>(&mut self, bus: &mut B) -> u16 {
+        let base = self.fetch_byte(bus);
+        self.read_zero_page_u16(bus, base)
+            .wrapping_add(self.y as u16)
+    }
+
+    fn read_zero_page_u16<B: Bus>(&mut self, bus: &mut B, base: u8) -> u16 {
+        let low = bus.read(base as u16);
+        let high = bus.read(base.wrapping_add(1) as u16);
+        u16::from_le_bytes([low, high])
+    }
+
+    fn service_interrupt<B: Bus>(&mut self, bus: &mut B, vector: u16, is_break: bool) {
+        self.push_u16(bus, self.pc);
+        let status = if is_break {
+            self.status | FLAG_BREAK | FLAG_UNUSED
+        } else {
+            (self.status & !FLAG_BREAK) | FLAG_UNUSED
+        };
+        self.push(bus, status);
+        self.set_flag(FLAG_INTERRUPT_DISABLE, true);
+        self.pc = self.read_u16(bus, vector);
+    }
+
     fn read_u16<B: Bus>(&mut self, bus: &mut B, addr: u16) -> u16 {
         let low = bus.read(addr);
         let high = bus.read(addr.wrapping_add(1));
@@ -578,17 +639,19 @@ impl Cpu6510 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cpu6510, FLAG_INTERRUPT_DISABLE, FLAG_ZERO};
+    use super::{Cpu6510, FLAG_BREAK, FLAG_INTERRUPT_DISABLE, FLAG_ZERO};
     use crate::bus::Bus;
 
     struct TestBus {
         memory: [u8; 0x10000],
+        irq_pending: bool,
     }
 
     impl TestBus {
         fn new() -> Self {
             Self {
                 memory: [0; 0x10000],
+                irq_pending: false,
             }
         }
 
@@ -611,6 +674,10 @@ mod tests {
 
         fn write(&mut self, addr: u16, value: u8) {
             self.memory[addr as usize] = value;
+        }
+
+        fn poll_irq(&mut self) -> bool {
+            self.irq_pending
         }
     }
 
@@ -732,5 +799,89 @@ mod tests {
         assert_eq!(cpu.a, 0x80);
         assert_ne!(cpu.status & FLAG_ZERO, 0);
         assert_ne!(cpu.status & FLAG_INTERRUPT_DISABLE, 0);
+    }
+
+    #[test]
+    fn indexed_indirect_load_and_store_follow_zero_page_vectors() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA2, 0x04, 0xA1, 0x20, 0x81, 0x30, 0x00]);
+        bus.memory[0x0024] = 0x00;
+        bus.memory[0x0025] = 0x40;
+        bus.memory[0x0034] = 0x00;
+        bus.memory[0x0035] = 0x50;
+        bus.memory[0x4000] = 0x7B;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.a, 0x7B);
+        assert_eq!(bus.memory[0x5000], 0x7B);
+    }
+
+    #[test]
+    fn indirect_indexed_load_and_store_copy_bytes_through_pointers() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA0, 0x01, 0xB1, 0x10, 0x91, 0x20, 0x00]);
+        bus.memory[0x0010] = 0x00;
+        bus.memory[0x0011] = 0x40;
+        bus.memory[0x0020] = 0x00;
+        bus.memory[0x0021] = 0x50;
+        bus.memory[0x4001] = 0x44;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.a, 0x44);
+        assert_eq!(bus.memory[0x5001], 0x44);
+    }
+
+    #[test]
+    fn pending_irq_vectors_before_next_instruction() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.memory[0xFFFE] = 0x00;
+        bus.memory[0xFFFF] = 0x90;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+        cpu.status &= !FLAG_INTERRUPT_DISABLE;
+        bus.irq_pending = true;
+
+        let cycles = cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cycles, 7);
+        assert_eq!(cpu.pc, 0x9000);
+        assert_ne!(cpu.status & FLAG_INTERRUPT_DISABLE, 0);
+    }
+
+    #[test]
+    fn rti_restores_status_and_program_counter() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0x40]);
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+        cpu.sp = 0xFA;
+        bus.memory[0x01FB] = FLAG_ZERO;
+        bus.memory[0x01FC] = 0x34;
+        bus.memory[0x01FD] = 0x12;
+
+        let cycles = cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cycles, 6);
+        assert_eq!(cpu.pc, 0x1234);
+        assert_ne!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_BREAK, 0);
     }
 }

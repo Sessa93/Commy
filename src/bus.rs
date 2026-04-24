@@ -8,6 +8,10 @@ use crate::vic::{RasterState, VicII};
 pub trait Bus {
     fn read(&mut self, addr: u16) -> u8;
     fn write(&mut self, addr: u16, value: u8);
+
+    fn poll_irq(&mut self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +262,11 @@ impl C64Bus {
 
 impl Bus for C64Bus {
     fn read(&mut self, addr: u16) -> u8 {
-        self.read_internal(addr)
+        match addr {
+            0xDC00..=0xDCFF if self.io_visible() => self.cia1.read_mut(addr),
+            0xDD00..=0xDDFF if self.io_visible() => self.cia2.read_mut(addr),
+            _ => self.read_internal(addr),
+        }
     }
 
     fn write(&mut self, addr: u16, value: u8) {
@@ -268,6 +276,10 @@ impl Bus for C64Bus {
             0xD000..=0xDFFF if self.io_visible() => self.write_io(addr, value),
             _ => self.ram[addr as usize] = value,
         }
+    }
+
+    fn poll_irq(&mut self) -> bool {
+        self.cia1.irq_pending() || self.cia2.irq_pending()
     }
 }
 
