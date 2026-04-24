@@ -1,0 +1,11 @@
+[package]
+name = "commy"
+version = "0.1.0"
+edition = "2021"
+description = "A work-in-progress Commodore 64 emulator in Rust"
+
+[lib]
+name = "commy"
+path = "src/lib.rs"
+
+[dependencies]
