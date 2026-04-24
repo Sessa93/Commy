@@ -51,7 +51,10 @@ impl Cia6526 {
             0x05 => (self.timer_a_counter >> 8) as u8,
             0x06 => self.timer_b_counter as u8,
             0x07 => (self.timer_b_counter >> 8) as u8,
-            0x0D => self.registers[0x0D] | if self.irq_pending { 0x80 } else { 0x00 },
+            0x0D => {
+                let masked_interrupt = self.registers[0x0D] & self.interrupt_mask != 0;
+                self.registers[0x0D] | if masked_interrupt { 0x80 } else { 0x00 }
+            }
             index => self.registers[index],
         }
     }
@@ -146,6 +149,12 @@ impl Cia6526 {
 
     pub fn irq_pending(&self) -> bool {
         self.irq_pending
+    }
+
+    pub fn take_irq(&mut self) -> bool {
+        let pending = self.irq_pending;
+        self.irq_pending = false;
+        pending
     }
 
     fn tick_timer_a(&mut self) {
