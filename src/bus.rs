@@ -9,6 +9,10 @@ pub trait Bus {
     fn read(&mut self, addr: u16) -> u8;
     fn write(&mut self, addr: u16, value: u8);
 
+    fn poll_nmi(&mut self) -> bool {
+        false
+    }
+
     fn poll_irq(&mut self) -> bool {
         false
     }
@@ -279,7 +283,11 @@ impl Bus for C64Bus {
     }
 
     fn poll_irq(&mut self) -> bool {
-        self.cia1.irq_pending() || self.cia2.irq_pending()
+        self.cia1.irq_pending()
+    }
+
+    fn poll_nmi(&mut self) -> bool {
+        self.cia2.take_irq()
     }
 }
 

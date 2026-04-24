@@ -275,4 +275,28 @@ mod tests {
         assert_eq!(c64.peek_ram(0x0400), 0x09);
         assert!(!c64.cia1_snapshot().irq_pending);
     }
+
+    #[test]
+    fn cia2_timer_nmi_reaches_kernal_handler_even_with_interrupts_disabled() {
+        let mut c64 = Commodore64::new();
+        let mut kernal = vec![0; 0x2000];
+
+        kernal[0x0000..0x001C].copy_from_slice(&[
+            0xA9, 0x03, 0x8D, 0x04, 0xDD, 0xA9, 0x00, 0x8D, 0x05, 0xDD, 0xA9, 0x81, 0x8D, 0x0D,
+            0xDD, 0xA9, 0x19, 0x8D, 0x0E, 0xDD, 0xAD, 0x01, 0x04, 0xC9, 0x0A, 0xD0, 0xF9, 0x00,
+        ]);
+        kernal[0x0020..0x0029].copy_from_slice(&[0xAD, 0x0D, 0xDD, 0xA9, 0x0A, 0x8D, 0x01, 0x04, 0x40]);
+        kernal[0x1FFA] = 0x20;
+        kernal[0x1FFB] = 0xE0;
+        kernal[0x1FFC] = 0x00;
+        kernal[0x1FFD] = 0xE0;
+
+        c64.load_rom(RomRegion::Kernal, &kernal).unwrap();
+        c64.reset();
+        c64.run_steps(64).unwrap();
+
+        assert!(c64.cpu.stopped);
+        assert_eq!(c64.peek_ram(0x0401), 0x0A);
+        assert!(!c64.cia2_snapshot().irq_pending);
+    }
 }

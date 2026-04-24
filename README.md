@@ -27,6 +27,7 @@ Implemented now:
 - CIA timer countdown and SID voice phase stepping tied to the same bus tick path as the VIC-II
 - ROM reset handlers that can execute directly from mapped KERNAL ROM bytes
 - CIA timer IRQ delivery into the CPU with KERNAL-side acknowledge and return via `RTI`
+- CIA2 timer-driven NMI delivery into the CPU, including edge-consumed NMI polling and KERNAL-side return via `RTI`
 
 Not implemented yet:
 
@@ -61,11 +62,11 @@ Run with ROM images mounted:
 cargo run -- --kernal-rom roms/kernal.rom --basic-rom roms/basic.rom --char-rom roms/chargen.rom --steps 20000
 ```
 
-The CLI prints CPU state, the active reset vector, VIC raster position, CIA timing and IRQ state, SID phase state, a small RAM window, and the first few lines of the text screen snapshot.
+The CLI prints CPU state, the active reset vector, VIC raster position, CIA1 IRQ state, CIA2 NMI state, SID phase state, a small RAM window, and the first few lines of the text screen snapshot.
 
 ## Suggested Next Milestones
 
 1. Expand opcode coverage and addressing modes until larger KERNAL and BASIC routines run without unsupported opcodes.
 2. Flesh out the VIC-II beyond raster counters and text snapshots, then add real CIA keyboard/joystick behavior and SID waveform/envelope generation.
 3. Refine the shared timing model from simple per-instruction ticking toward cycle-accurate coordination and richer interrupt sources.
-4. Boot through real ROMs far enough to reach a recognizable KERNAL/BASIC startup path instead of only smoke-tested reset and IRQ handlers.
+4. Boot through real ROMs far enough to reach a recognizable KERNAL/BASIC startup path instead of only smoke-tested reset, IRQ, and NMI handlers.

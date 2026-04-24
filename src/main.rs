@@ -102,7 +102,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         cia1.interrupt_mask
     );
     println!(
-        "cia2: cycles={} timer_a={} timer_b={} running_a={} running_b={} irq_pending={} mask=${:02X}",
+        "cia2: cycles={} timer_a={} timer_b={} running_a={} running_b={} nmi_pending={} mask=${:02X}",
         cia2.total_cycles,
         cia2.timer_a,
         cia2.timer_b,

@@ -107,6 +107,11 @@ impl Cpu6510 {
             return Ok(0);
         }
 
+        if bus.poll_nmi() {
+            self.service_interrupt(bus, 0xFFFA, false);
+            return Ok(7);
+        }
+
         if self.status & FLAG_INTERRUPT_DISABLE == 0 && bus.poll_irq() {
             self.service_interrupt(bus, 0xFFFE, false);
             return Ok(7);
@@ -644,6 +649,7 @@ mod tests {
 
     struct TestBus {
         memory: [u8; 0x10000],
+        nmi_pending: bool,
         irq_pending: bool,
     }
 
@@ -651,6 +657,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 memory: [0; 0x10000],
+                nmi_pending: false,
                 irq_pending: false,
             }
         }
@@ -674,6 +681,10 @@ mod tests {
 
         fn write(&mut self, addr: u16, value: u8) {
             self.memory[addr as usize] = value;
+        }
+
+        fn poll_nmi(&mut self) -> bool {
+            self.nmi_pending
         }
 
         fn poll_irq(&mut self) -> bool {
@@ -856,6 +867,24 @@ mod tests {
         cpu.reset(&mut bus);
         cpu.status &= !FLAG_INTERRUPT_DISABLE;
         bus.irq_pending = true;
+
+        let cycles = cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cycles, 7);
+        assert_eq!(cpu.pc, 0x9000);
+        assert_ne!(cpu.status & FLAG_INTERRUPT_DISABLE, 0);
+    }
+
+    #[test]
+    fn pending_nmi_vectors_even_with_interrupt_disable_set() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.memory[0xFFFA] = 0x00;
+        bus.memory[0xFFFB] = 0x90;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+        bus.nmi_pending = true;
 
         let cycles = cpu.step(&mut bus).unwrap();
 
