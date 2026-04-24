@@ -1,6 +1,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::cia::{Cia6526, CiaSnapshot};
+use crate::sid::{Sid6581, SidSnapshot};
 use crate::vic::{RasterState, VicII};
 
 pub trait Bus {
@@ -68,9 +70,9 @@ pub struct C64Bus {
     kernal_rom: Option<Vec<u8>>,
     char_rom: Option<Vec<u8>>,
     vic: VicII,
-    sid: [u8; 0x20],
-    cia1: [u8; 0x10],
-    cia2: [u8; 0x10],
+    sid: Sid6581,
+    cia1: Cia6526,
+    cia2: Cia6526,
     cpu_port_ddr: u8,
     cpu_port: u8,
 }
@@ -88,9 +90,9 @@ impl Default for C64Bus {
             kernal_rom: None,
             char_rom: None,
             vic: VicII::new(),
-            sid: [0; 0x20],
-            cia1: [0; 0x10],
-            cia2: [0; 0x10],
+            sid: Sid6581::new(),
+            cia1: Cia6526::new(),
+            cia2: Cia6526::new(),
             cpu_port_ddr: 0x2F,
             cpu_port: 0x37,
         }
@@ -164,6 +166,9 @@ impl C64Bus {
 
     pub fn tick(&mut self, cycles: u8) {
         self.vic.tick(cycles);
+        self.sid.tick(cycles);
+        self.cia1.tick(cycles);
+        self.cia2.tick(cycles);
     }
 
     pub fn raster_state(&self) -> RasterState {
@@ -172,6 +177,18 @@ impl C64Bus {
 
     pub fn screen_text(&self) -> String {
         self.vic.render_text_screen(&self.ram)
+    }
+
+    pub fn sid_snapshot(&self) -> SidSnapshot {
+        self.sid.snapshot()
+    }
+
+    pub fn cia1_snapshot(&self) -> CiaSnapshot {
+        self.cia1.snapshot()
+    }
+
+    pub fn cia2_snapshot(&self) -> CiaSnapshot {
+        self.cia2.snapshot()
     }
 
     fn basic_visible(&self) -> bool {
@@ -219,10 +236,10 @@ impl C64Bus {
     fn read_io(&self, addr: u16) -> u8 {
         match addr {
             0xD000..=0xD3FF => self.vic.read(addr),
-            0xD400..=0xD7FF => self.sid[(addr as usize - 0xD400) & 0x1F],
+            0xD400..=0xD7FF => self.sid.read(addr),
             0xD800..=0xDBFF => self.color_ram[(addr - 0xD800) as usize] & 0x0F,
-            0xDC00..=0xDCFF => self.cia1[(addr as usize - 0xDC00) & 0x0F],
-            0xDD00..=0xDDFF => self.cia2[(addr as usize - 0xDD00) & 0x0F],
+            0xDC00..=0xDCFF => self.cia1.read(addr),
+            0xDD00..=0xDDFF => self.cia2.read(addr),
             _ => self.ram[addr as usize],
         }
     }
@@ -230,10 +247,10 @@ impl C64Bus {
     fn write_io(&mut self, addr: u16, value: u8) {
         match addr {
             0xD000..=0xD3FF => self.vic.write(addr, value),
-            0xD400..=0xD7FF => self.sid[(addr as usize - 0xD400) & 0x1F] = value,
+            0xD400..=0xD7FF => self.sid.write(addr, value),
             0xD800..=0xDBFF => self.color_ram[(addr - 0xD800) as usize] = value & 0x0F,
-            0xDC00..=0xDCFF => self.cia1[(addr as usize - 0xDC00) & 0x0F] = value,
-            0xDD00..=0xDDFF => self.cia2[(addr as usize - 0xDD00) & 0x0F] = value,
+            0xDC00..=0xDCFF => self.cia1.write(addr, value),
+            0xDD00..=0xDDFF => self.cia2.write(addr, value),
             _ => self.ram[addr as usize] = value,
         }
     }
@@ -301,5 +318,30 @@ mod tests {
 
         assert_eq!(bus.reset_vector(), 0x0801);
         assert_eq!(bus.current_reset_vector(), 0x1234);
+    }
+
+    #[test]
+    fn cia_timer_registers_advance_with_bus_ticks() {
+        let mut bus = C64Bus::new();
+        bus.write(0xDC04, 0x03);
+        bus.write(0xDC05, 0x00);
+        bus.write(0xDC0E, 0x11);
+
+        bus.tick(2);
+
+        assert_eq!(bus.read(0xDC04), 0x01);
+        assert_eq!(bus.cia1_snapshot().total_cycles, 2);
+    }
+
+    #[test]
+    fn sid_phase_advances_with_bus_ticks() {
+        let mut bus = C64Bus::new();
+        bus.write(0xD400, 0x34);
+        bus.write(0xD401, 0x12);
+
+        bus.tick(2);
+
+        assert_eq!(bus.sid_snapshot().total_cycles, 2);
+        assert_eq!(bus.sid_snapshot().voice_phase[0], 0x1234 * 2);
     }
 }

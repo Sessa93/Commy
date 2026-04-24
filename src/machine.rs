@@ -2,7 +2,9 @@ use std::error::Error;
 use std::fmt;
 
 use crate::bus::{C64Bus, MemoryAccessError, RomLoadError, RomRegion};
+use crate::cia::CiaSnapshot;
 use crate::cpu::{Cpu6510, CpuError};
+use crate::sid::SidSnapshot;
 use crate::vic::RasterState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,12 +113,24 @@ impl Commodore64 {
     pub fn current_reset_vector(&self) -> u16 {
         self.bus.current_reset_vector()
     }
+
+    pub fn sid_snapshot(&self) -> SidSnapshot {
+        self.bus.sid_snapshot()
+    }
+
+    pub fn cia1_snapshot(&self) -> CiaSnapshot {
+        self.bus.cia1_snapshot()
+    }
+
+    pub fn cia2_snapshot(&self) -> CiaSnapshot {
+        self.bus.cia2_snapshot()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Commodore64;
-    use crate::RomRegion;
+    use crate::{Bus, RomRegion};
 
     #[test]
     fn prg_load_sets_reset_vector_and_ram_contents() {
@@ -171,5 +185,42 @@ mod tests {
 
         assert_eq!(c64.current_reset_vector(), 0xE000);
         assert_eq!(c64.cpu.pc, 0xE000);
+    }
+
+    #[test]
+    fn machine_ticks_cia_and_sid_alongside_vic() {
+        let mut c64 = Commodore64::new();
+        c64.bus.write(0xDC04, 0x02);
+        c64.bus.write(0xDC05, 0x00);
+        c64.bus.write(0xDC0E, 0x11);
+        c64.bus.write(0xD400, 0x34);
+        c64.bus.write(0xD401, 0x12);
+
+        c64.bus.tick(2);
+
+        assert_eq!(c64.cia1_snapshot().total_cycles, 2);
+        assert_eq!(c64.sid_snapshot().voice_phase[0], 0x1234 * 2);
+    }
+
+    #[test]
+    fn kernal_rom_reset_handler_can_boot_and_write_to_screen() {
+        let mut c64 = Commodore64::new();
+        let mut kernal = vec![0; 0x2000];
+
+        kernal[0x0000..0x0010].copy_from_slice(&[
+            0xA2, 0x00, 0xBD, 0x10, 0xE0, 0x9D, 0x00, 0x04, 0xE8, 0xE0, 0x06, 0xD0, 0xF5, 0x00,
+            0xEA, 0xEA,
+        ]);
+        kernal[0x0010..0x0016].copy_from_slice(&[0x12, 0x05, 0x01, 0x04, 0x19, 0x2E]);
+        kernal[0x1FFC] = 0x00;
+        kernal[0x1FFD] = 0xE0;
+
+        c64.load_rom(RomRegion::Kernal, &kernal).unwrap();
+        c64.reset();
+        c64.run_steps(64).unwrap();
+
+        assert!(c64.cpu.stopped);
+        assert!(c64.screen_text().starts_with("READY."));
+        assert_eq!(c64.current_reset_vector(), 0xE000);
     }
 }

@@ -88,6 +88,21 @@ fn run() -> Result<(), Box<dyn Error>> {
         "vic raster: line={} cycle={} frame={}",
         raster.line, raster.cycle, raster.frame
     );
+    let cia1 = c64.cia1_snapshot();
+    let cia2 = c64.cia2_snapshot();
+    let sid = c64.sid_snapshot();
+    println!(
+        "cia1: cycles={} timer_a={} timer_b={} running_a={} running_b={}",
+        cia1.total_cycles, cia1.timer_a, cia1.timer_b, cia1.timer_a_running, cia1.timer_b_running
+    );
+    println!(
+        "cia2: cycles={} timer_a={} timer_b={} running_a={} running_b={}",
+        cia2.total_cycles, cia2.timer_a, cia2.timer_b, cia2.timer_a_running, cia2.timer_b_running
+    );
+    println!(
+        "sid: cycles={} voice_phase=[{}, {}, {}]",
+        sid.total_cycles, sid.voice_phase[0], sid.voice_phase[1], sid.voice_phase[2]
+    );
     if let Some(load_address) = load_address {
         println!("loaded bytes:");
         dump_window(&c64, load_address, 8);
