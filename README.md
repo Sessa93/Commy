@@ -35,7 +35,7 @@ Not implemented yet:
 
 - VIC-II timing and rendering
 - SID audio
-- CIA timers and keyboard/joystick matrix
+- CIA joystick behavior and fuller port-direction/peripheral modeling
 - exact cycle timing, illegal opcodes, cartridges, tape, disk, and full KERNAL/BASIC boot flow
 
 ## Usage

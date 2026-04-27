@@ -206,6 +206,18 @@ impl C64Bus {
         self.cia2.snapshot()
     }
 
+    fn cia_port_output_mask(cia: &Cia6526, port_addr: u16, ddr_addr: u16) -> u8 {
+        let port = cia.read(port_addr);
+        let ddr = cia.read(ddr_addr);
+        port | !ddr
+    }
+
+    fn cia_port_input_value(cia: &Cia6526, port_addr: u16, ddr_addr: u16, input: u8) -> u8 {
+        let port = cia.read(port_addr);
+        let ddr = cia.read(ddr_addr);
+        (port & ddr) | (input & !ddr)
+    }
+
     fn basic_visible(&self) -> bool {
         let loram = self.cpu_port & 0b001 != 0;
         let hiram = self.cpu_port & 0b010 != 0;
@@ -253,8 +265,16 @@ impl C64Bus {
             0xD000..=0xD3FF => self.vic.read(addr),
             0xD400..=0xD7FF => self.sid.read(addr),
             0xD800..=0xDBFF => self.color_ram[(addr - 0xD800) as usize] & 0x0F,
-            0xDC00 => self.cia1.read(addr) & self.keyboard.read_rows(self.cia1.read(0xDC01)),
-            0xDC01 => self.cia1.read(addr) & self.keyboard.read_columns(self.cia1.read(0xDC00)),
+            0xDC00 => {
+                let column_select = Self::cia_port_output_mask(&self.cia1, 0xDC01, 0xDC03);
+                let rows = self.keyboard.read_rows(column_select);
+                Self::cia_port_input_value(&self.cia1, 0xDC00, 0xDC02, rows)
+            }
+            0xDC01 => {
+                let row_select = Self::cia_port_output_mask(&self.cia1, 0xDC00, 0xDC02);
+                let columns = self.keyboard.read_columns(row_select);
+                Self::cia_port_input_value(&self.cia1, 0xDC01, 0xDC03, columns)
+            }
             0xDC00..=0xDCFF => self.cia1.read(addr),
             0xDD00..=0xDDFF => self.cia2.read(addr),
             _ => self.ram[addr as usize],
@@ -378,7 +398,21 @@ mod tests {
     fn cia1_port_b_reflects_pressed_key_for_selected_row() {
         let mut bus = C64Bus::new();
         bus.set_key(0, 2, true);
+        bus.write(0xDC02, 0xFF);
         bus.write(0xDC00, 0xFE);
+
+        assert_eq!(bus.read(0xDC01), 0xFB);
+    }
+
+    #[test]
+    fn cia1_keyboard_scan_requires_output_direction_on_selected_port() {
+        let mut bus = C64Bus::new();
+        bus.set_key(0, 2, true);
+        bus.write(0xDC00, 0xFE);
+
+        assert_eq!(bus.read(0xDC01), 0xFF);
+
+        bus.write(0xDC02, 0xFF);
 
         assert_eq!(bus.read(0xDC01), 0xFB);
     }
