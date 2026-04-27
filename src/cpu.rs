@@ -125,6 +125,11 @@ impl Cpu6510 {
                 self.stopped = true;
                 7
             }
+            0x06 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.update_memory(bus, addr, Self::asl);
+                5
+            }
             0x08 => {
                 self.push(bus, self.status | FLAG_BREAK | FLAG_UNUSED);
                 3
@@ -134,7 +139,16 @@ impl Cpu6510 {
                 self.set_zn(self.a);
                 2
             }
+            0x0A => {
+                self.a = self.asl(self.a);
+                2
+            }
             0x10 => self.branch(bus, self.status & FLAG_NEGATIVE == 0),
+            0x16 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.update_memory(bus, addr, Self::asl);
+                6
+            }
             0x18 => {
                 self.set_flag(FLAG_CARRY, false);
                 2
@@ -151,6 +165,11 @@ impl Cpu6510 {
                 self.bit(bus.read(addr));
                 3
             }
+            0x26 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.update_memory(bus, addr, Self::rol);
+                5
+            }
             0x28 => {
                 self.status = (self.pop(bus) | FLAG_UNUSED) & !FLAG_BREAK;
                 4
@@ -160,20 +179,44 @@ impl Cpu6510 {
                 self.set_zn(self.a);
                 2
             }
+            0x2A => {
+                self.a = self.rol(self.a);
+                2
+            }
             0x2C => {
                 let addr = self.fetch_word(bus);
                 self.bit(bus.read(addr));
                 4
             }
+            0x2E => {
+                let addr = self.fetch_word(bus);
+                self.update_memory(bus, addr, Self::rol);
+                6
+            }
             0x30 => self.branch(bus, self.status & FLAG_NEGATIVE != 0),
+            0x36 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.update_memory(bus, addr, Self::rol);
+                6
+            }
             0x38 => {
                 self.set_flag(FLAG_CARRY, true);
                 2
+            }
+            0x3E => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.update_memory(bus, addr, Self::rol);
+                7
             }
             0x40 => {
                 self.status = (self.pop(bus) | FLAG_UNUSED) & !FLAG_BREAK;
                 self.pc = self.pop_u16(bus);
                 6
+            }
+            0x46 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.update_memory(bus, addr, Self::lsr);
+                5
             }
             0x4C => {
                 self.pc = self.fetch_word(bus);
@@ -188,14 +231,38 @@ impl Cpu6510 {
                 self.set_zn(self.a);
                 2
             }
+            0x4A => {
+                self.a = self.lsr(self.a);
+                2
+            }
+            0x4E => {
+                let addr = self.fetch_word(bus);
+                self.update_memory(bus, addr, Self::lsr);
+                6
+            }
             0x50 => self.branch(bus, self.status & FLAG_OVERFLOW == 0),
+            0x56 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.update_memory(bus, addr, Self::lsr);
+                6
+            }
             0x58 => {
                 self.set_flag(FLAG_INTERRUPT_DISABLE, false);
                 2
             }
+            0x5E => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.update_memory(bus, addr, Self::lsr);
+                7
+            }
             0x60 => {
                 self.pc = self.pop_u16(bus).wrapping_add(1);
                 6
+            }
+            0x66 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.update_memory(bus, addr, Self::ror);
+                5
             }
             0x68 => {
                 self.a = self.pop(bus);
@@ -207,15 +274,34 @@ impl Cpu6510 {
                 self.adc(value);
                 2
             }
+            0x6A => {
+                self.a = self.ror(self.a);
+                2
+            }
             0x6C => {
                 let vector = self.fetch_word(bus);
                 self.pc = self.read_u16_bug(bus, vector);
                 5
             }
+            0x6E => {
+                let addr = self.fetch_word(bus);
+                self.update_memory(bus, addr, Self::ror);
+                6
+            }
             0x70 => self.branch(bus, self.status & FLAG_OVERFLOW != 0),
+            0x76 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.update_memory(bus, addr, Self::ror);
+                6
+            }
             0x78 => {
                 self.set_flag(FLAG_INTERRUPT_DISABLE, true);
                 2
+            }
+            0x7E => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.update_memory(bus, addr, Self::ror);
+                7
             }
             0x81 => {
                 let addr = self.fetch_indexed_indirect_addr(bus);
@@ -500,6 +586,16 @@ impl Cpu6510 {
                 self.set_zn(value);
                 6
             }
+            0x0E => {
+                let addr = self.fetch_word(bus);
+                self.update_memory(bus, addr, Self::asl);
+                6
+            }
+            0x1E => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.update_memory(bus, addr, Self::asl);
+                7
+            }
             0xF0 => self.branch(bus, self.status & FLAG_ZERO != 0),
             0xF8 => {
                 self.set_flag(FLAG_DECIMAL, true);
@@ -545,6 +641,36 @@ impl Cpu6510 {
         self.set_flag(FLAG_ZERO, self.a & value == 0);
         self.set_flag(FLAG_OVERFLOW, value & FLAG_OVERFLOW != 0);
         self.set_flag(FLAG_NEGATIVE, value & FLAG_NEGATIVE != 0);
+    }
+
+    fn asl(&mut self, value: u8) -> u8 {
+        self.set_flag(FLAG_CARRY, value & 0x80 != 0);
+        let result = value << 1;
+        self.set_zn(result);
+        result
+    }
+
+    fn lsr(&mut self, value: u8) -> u8 {
+        self.set_flag(FLAG_CARRY, value & 0x01 != 0);
+        let result = value >> 1;
+        self.set_zn(result);
+        result
+    }
+
+    fn rol(&mut self, value: u8) -> u8 {
+        let carry_in = u8::from(self.status & FLAG_CARRY != 0);
+        self.set_flag(FLAG_CARRY, value & 0x80 != 0);
+        let result = (value << 1) | carry_in;
+        self.set_zn(result);
+        result
+    }
+
+    fn ror(&mut self, value: u8) -> u8 {
+        let carry_in = if self.status & FLAG_CARRY != 0 { 0x80 } else { 0x00 };
+        self.set_flag(FLAG_CARRY, value & 0x01 != 0);
+        let result = (value >> 1) | carry_in;
+        self.set_zn(result);
+        result
     }
 
     fn branch<B: Bus>(&mut self, bus: &mut B, condition: bool) -> u8 {
@@ -604,6 +730,12 @@ impl Cpu6510 {
         let low = bus.read(base as u16);
         let high = bus.read(base.wrapping_add(1) as u16);
         u16::from_le_bytes([low, high])
+    }
+
+    fn update_memory<B: Bus>(&mut self, bus: &mut B, addr: u16, op: fn(&mut Self, u8) -> u8) {
+        let value = bus.read(addr);
+        let result = op(self, value);
+        bus.write(addr, result);
     }
 
     fn service_interrupt<B: Bus>(&mut self, bus: &mut B, vector: u16, is_break: bool) {
@@ -917,6 +1049,63 @@ mod tests {
 
         assert_eq!(cycles, 5);
         assert_eq!(cpu.pc, 0x1234);
+    }
+
+    #[test]
+    fn shift_and_rotate_accumulator_round_trip_bits_and_carry() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA9, 0x81, 0x0A, 0x6A, 0x4A, 0x2A, 0x00]);
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        cpu.step(&mut bus).unwrap();
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.a, 0x02);
+        assert_ne!(cpu.status & super::FLAG_CARRY, 0);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.a, 0x81);
+        assert_eq!(cpu.status & super::FLAG_CARRY, 0);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.a, 0x40);
+        assert_ne!(cpu.status & super::FLAG_CARRY, 0);
+
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.a, 0x81);
+        assert_eq!(cpu.status & super::FLAG_CARRY, 0);
+        assert_ne!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn memory_shift_and_rotate_variants_update_memory_and_flags() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(
+            0x8000,
+            &[
+                0x38, 0xA2, 0x01, 0x36, 0x0F, 0x5E, 0xFF, 0x1F, 0x2E, 0x01, 0x20, 0x6E, 0x01,
+                0x20, 0x00,
+            ],
+        );
+        bus.memory[0x0010] = 0x40;
+        bus.memory[0x2000] = 0x01;
+        bus.memory[0x2001] = 0x80;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(bus.memory[0x0010], 0x81);
+        assert_eq!(bus.memory[0x2000], 0x00);
+        assert_eq!(bus.memory[0x2001], 0x80);
+        assert_ne!(cpu.status & super::FLAG_CARRY, 0);
+        assert_ne!(cpu.status & FLAG_NEGATIVE, 0);
     }
 
     #[test]
