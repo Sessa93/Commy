@@ -134,16 +134,41 @@ impl Cpu6510 {
                 self.push(bus, self.status | FLAG_BREAK | FLAG_UNUSED);
                 3
             }
+            0x01 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                self.ora(bus.read(addr));
+                6
+            }
+            0x05 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.ora(bus.read(addr));
+                3
+            }
             0x09 => {
-                self.a |= self.fetch_byte(bus);
-                self.set_zn(self.a);
+                let value = self.fetch_byte(bus);
+                self.ora(value);
                 2
             }
             0x0A => {
                 self.a = self.asl(self.a);
                 2
             }
+            0x0D => {
+                let addr = self.fetch_word(bus);
+                self.ora(bus.read(addr));
+                4
+            }
             0x10 => self.branch(bus, self.status & FLAG_NEGATIVE == 0),
+            0x11 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                self.ora(bus.read(addr));
+                5
+            }
+            0x15 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.ora(bus.read(addr));
+                4
+            }
             0x16 => {
                 let addr = self.fetch_zero_page_x_addr(bus);
                 self.update_memory(bus, addr, Self::asl);
@@ -153,6 +178,16 @@ impl Cpu6510 {
                 self.set_flag(FLAG_CARRY, false);
                 2
             }
+            0x19 => {
+                let addr = self.fetch_absolute_y_addr(bus);
+                self.ora(bus.read(addr));
+                4
+            }
+            0x1D => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.ora(bus.read(addr));
+                4
+            }
             0x20 => {
                 let target = self.fetch_word(bus);
                 let return_addr = self.pc.wrapping_sub(1);
@@ -160,9 +195,19 @@ impl Cpu6510 {
                 self.pc = target;
                 6
             }
+            0x21 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                self.and(bus.read(addr));
+                6
+            }
             0x24 => {
                 let addr = self.fetch_zero_page_addr(bus);
                 self.bit(bus.read(addr));
+                3
+            }
+            0x25 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.and(bus.read(addr));
                 3
             }
             0x26 => {
@@ -175,8 +220,8 @@ impl Cpu6510 {
                 4
             }
             0x29 => {
-                self.a &= self.fetch_byte(bus);
-                self.set_zn(self.a);
+                let value = self.fetch_byte(bus);
+                self.and(value);
                 2
             }
             0x2A => {
@@ -188,12 +233,27 @@ impl Cpu6510 {
                 self.bit(bus.read(addr));
                 4
             }
+            0x2D => {
+                let addr = self.fetch_word(bus);
+                self.and(bus.read(addr));
+                4
+            }
             0x2E => {
                 let addr = self.fetch_word(bus);
                 self.update_memory(bus, addr, Self::rol);
                 6
             }
             0x30 => self.branch(bus, self.status & FLAG_NEGATIVE != 0),
+            0x31 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                self.and(bus.read(addr));
+                5
+            }
+            0x35 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.and(bus.read(addr));
+                4
+            }
             0x36 => {
                 let addr = self.fetch_zero_page_x_addr(bus);
                 self.update_memory(bus, addr, Self::rol);
@@ -203,20 +263,40 @@ impl Cpu6510 {
                 self.set_flag(FLAG_CARRY, true);
                 2
             }
+            0x39 => {
+                let addr = self.fetch_absolute_y_addr(bus);
+                self.and(bus.read(addr));
+                4
+            }
             0x3E => {
                 let addr = self.fetch_absolute_x_addr(bus);
                 self.update_memory(bus, addr, Self::rol);
                 7
+            }
+            0x3D => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.and(bus.read(addr));
+                4
             }
             0x40 => {
                 self.status = (self.pop(bus) | FLAG_UNUSED) & !FLAG_BREAK;
                 self.pc = self.pop_u16(bus);
                 6
             }
+            0x41 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                self.eor(bus.read(addr));
+                6
+            }
             0x46 => {
                 let addr = self.fetch_zero_page_addr(bus);
                 self.update_memory(bus, addr, Self::lsr);
                 5
+            }
+            0x45 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.eor(bus.read(addr));
+                3
             }
             0x4C => {
                 self.pc = self.fetch_word(bus);
@@ -227,13 +307,18 @@ impl Cpu6510 {
                 3
             }
             0x49 => {
-                self.a ^= self.fetch_byte(bus);
-                self.set_zn(self.a);
+                let value = self.fetch_byte(bus);
+                self.eor(value);
                 2
             }
             0x4A => {
                 self.a = self.lsr(self.a);
                 2
+            }
+            0x4D => {
+                let addr = self.fetch_word(bus);
+                self.eor(bus.read(addr));
+                4
             }
             0x4E => {
                 let addr = self.fetch_word(bus);
@@ -241,19 +326,39 @@ impl Cpu6510 {
                 6
             }
             0x50 => self.branch(bus, self.status & FLAG_OVERFLOW == 0),
+            0x51 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                self.eor(bus.read(addr));
+                5
+            }
             0x56 => {
                 let addr = self.fetch_zero_page_x_addr(bus);
                 self.update_memory(bus, addr, Self::lsr);
                 6
             }
+            0x55 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.eor(bus.read(addr));
+                4
+            }
             0x58 => {
                 self.set_flag(FLAG_INTERRUPT_DISABLE, false);
                 2
+            }
+            0x59 => {
+                let addr = self.fetch_absolute_y_addr(bus);
+                self.eor(bus.read(addr));
+                4
             }
             0x5E => {
                 let addr = self.fetch_absolute_x_addr(bus);
                 self.update_memory(bus, addr, Self::lsr);
                 7
+            }
+            0x5D => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.eor(bus.read(addr));
+                4
             }
             0x60 => {
                 self.pc = self.pop_u16(bus).wrapping_add(1);
@@ -629,6 +734,21 @@ impl Cpu6510 {
 
     fn sbc(&mut self, value: u8) {
         self.adc(!value);
+    }
+
+    fn ora(&mut self, value: u8) {
+        self.a |= value;
+        self.set_zn(self.a);
+    }
+
+    fn and(&mut self, value: u8) {
+        self.a &= value;
+        self.set_zn(self.a);
+    }
+
+    fn eor(&mut self, value: u8) {
+        self.a ^= value;
+        self.set_zn(self.a);
     }
 
     fn compare(&mut self, left: u8, right: u8) {
@@ -1014,6 +1134,97 @@ mod tests {
 
         assert_eq!(cpu.a, 0x44);
         assert_eq!(bus.memory[0x5001], 0x44);
+    }
+
+    #[test]
+    fn ora_supports_zero_page_and_indexed_memory_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(
+            0x8000,
+            &[
+                0xA2, 0x01, 0xA0, 0x01, 0xA9, 0x01, 0x05, 0x10, 0x15, 0x10, 0x1D, 0xFF, 0x1F,
+                0x19, 0xFF, 0x2F, 0x00,
+            ],
+        );
+        bus.memory[0x0010] = 0x02;
+        bus.memory[0x0011] = 0x04;
+        bus.memory[0x2000] = 0x08;
+        bus.memory[0x3000] = 0x10;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.a, 0x1F);
+        assert_eq!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn and_supports_absolute_and_indirect_memory_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(
+            0x8000,
+            &[
+                0xA2, 0x04, 0xA0, 0x01, 0xA9, 0xFF, 0x2D, 0x00, 0x20, 0x3D, 0xFC, 0x1F, 0x21,
+                0x20, 0x31, 0x10, 0x00,
+            ],
+        );
+        bus.memory[0x2000] = 0xF0;
+        bus.memory[0x0024] = 0x00;
+        bus.memory[0x0025] = 0x40;
+        bus.memory[0x0010] = 0xFF;
+        bus.memory[0x0011] = 0x4F;
+        bus.memory[0x4000] = 0xCC;
+        bus.memory[0x5000] = 0x0C;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.a, 0x00);
+        assert_ne!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn eor_supports_zero_page_absolute_and_indexed_indirect_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(
+            0x8000,
+            &[
+                0xA2, 0x04, 0xA0, 0x01, 0xA9, 0xAA, 0x45, 0x10, 0x5D, 0xFC, 0x1F, 0x41, 0x20,
+                0x51, 0x30, 0x00,
+            ],
+        );
+        bus.memory[0x0010] = 0x0F;
+        bus.memory[0x2000] = 0xF0;
+        bus.memory[0x0024] = 0x00;
+        bus.memory[0x0025] = 0x40;
+        bus.memory[0x0030] = 0xFF;
+        bus.memory[0x0031] = 0x4F;
+        bus.memory[0x4000] = 0x55;
+        bus.memory[0x5000] = 0x00;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.a, 0x00);
+        assert_ne!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
     }
 
     #[test]
