@@ -17,8 +17,8 @@ Implemented now:
 - `STA`, `STX`, `STY` with zero-page, absolute, indirect, and selected indexed modes
 - `TAX`, `TAY`, `TXA`, `TYA`, `TSX`, `TXS`
 - `INX`, `INY`, `DEX`, `DEY`
-- `INC`, `DEC`, `ADC`, `SBC`, `AND`, `ORA`, `EOR`, `CMP`, `CPX`, `CPY`
-- `JMP`, `JSR`, `RTS`, `RTI`, `BEQ`, `BNE`, `BCC`, `BCS`, `BMI`, `BPL`, `BVC`, `BVS`
+- `INC`, `DEC`, `ADC`, `SBC`, `AND`, `ORA`, `EOR`, `BIT`, `CMP`, `CPX`, `CPY`
+- `JMP` including indirect vector dispatch, `JSR`, `RTS`, `RTI`, `BEQ`, `BNE`, `BCC`, `BCS`, `BMI`, `BPL`, `BVC`, `BVS`
 - `CLC`, `SEC`, `CLI`, `SEI`, `CLD`, `SED`, `CLV`, `PHA`, `PLA`, `PHP`, `PLP`, `NOP`, `BRK`
 - reset vector handling
 - BASIC, KERNAL, and character ROM slots

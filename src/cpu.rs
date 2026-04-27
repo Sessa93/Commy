@@ -146,6 +146,11 @@ impl Cpu6510 {
                 self.pc = target;
                 6
             }
+            0x24 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.bit(bus.read(addr));
+                3
+            }
             0x28 => {
                 self.status = (self.pop(bus) | FLAG_UNUSED) & !FLAG_BREAK;
                 4
@@ -154,6 +159,11 @@ impl Cpu6510 {
                 self.a &= self.fetch_byte(bus);
                 self.set_zn(self.a);
                 2
+            }
+            0x2C => {
+                let addr = self.fetch_word(bus);
+                self.bit(bus.read(addr));
+                4
             }
             0x30 => self.branch(bus, self.status & FLAG_NEGATIVE != 0),
             0x38 => {
@@ -196,6 +206,11 @@ impl Cpu6510 {
                 let value = self.fetch_byte(bus);
                 self.adc(value);
                 2
+            }
+            0x6C => {
+                let vector = self.fetch_word(bus);
+                self.pc = self.read_u16_bug(bus, vector);
+                5
             }
             0x70 => self.branch(bus, self.status & FLAG_OVERFLOW != 0),
             0x78 => {
@@ -526,6 +541,12 @@ impl Cpu6510 {
         self.set_zn(result);
     }
 
+    fn bit(&mut self, value: u8) {
+        self.set_flag(FLAG_ZERO, self.a & value == 0);
+        self.set_flag(FLAG_OVERFLOW, value & FLAG_OVERFLOW != 0);
+        self.set_flag(FLAG_NEGATIVE, value & FLAG_NEGATIVE != 0);
+    }
+
     fn branch<B: Bus>(&mut self, bus: &mut B, condition: bool) -> u8 {
         let offset = self.fetch_byte(bus) as i8;
         if condition {
@@ -603,6 +624,13 @@ impl Cpu6510 {
         u16::from_le_bytes([low, high])
     }
 
+    fn read_u16_bug<B: Bus>(&mut self, bus: &mut B, addr: u16) -> u16 {
+        let low = bus.read(addr);
+        let high_addr = (addr & 0xFF00) | (addr.wrapping_add(1) & 0x00FF);
+        let high = bus.read(high_addr);
+        u16::from_le_bytes([low, high])
+    }
+
     fn push<B: Bus>(&mut self, bus: &mut B, value: u8) {
         let addr = 0x0100 | self.sp as u16;
         bus.write(addr, value);
@@ -644,7 +672,7 @@ impl Cpu6510 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cpu6510, FLAG_BREAK, FLAG_INTERRUPT_DISABLE, FLAG_ZERO};
+    use super::{Cpu6510, FLAG_BREAK, FLAG_INTERRUPT_DISABLE, FLAG_NEGATIVE, FLAG_OVERFLOW, FLAG_ZERO};
     use crate::bus::Bus;
 
     struct TestBus {
@@ -854,6 +882,41 @@ mod tests {
 
         assert_eq!(cpu.a, 0x44);
         assert_eq!(bus.memory[0x5001], 0x44);
+    }
+
+    #[test]
+    fn bit_updates_zero_negative_and_overflow_flags() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA9, 0x40, 0x2C, 0x00, 0x20, 0x00]);
+        bus.memory[0x2000] = 0xC0;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        cpu.step(&mut bus).unwrap();
+        cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cpu.status & FLAG_ZERO, 0);
+        assert_ne!(cpu.status & FLAG_NEGATIVE, 0);
+        assert_ne!(cpu.status & FLAG_OVERFLOW, 0);
+    }
+
+    #[test]
+    fn jmp_indirect_uses_page_wrapped_vector_like_6502() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0x6C, 0xFF, 0x20]);
+        bus.memory[0x20FF] = 0x34;
+        bus.memory[0x2000] = 0x12;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        let cycles = cpu.step(&mut bus).unwrap();
+
+        assert_eq!(cycles, 5);
+        assert_eq!(cpu.pc, 0x1234);
     }
 
     #[test]

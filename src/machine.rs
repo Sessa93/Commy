@@ -325,4 +325,25 @@ mod tests {
         assert_eq!(c64.peek_ram(0x0403), 0x0C);
         assert_eq!(c64.bus.read(0xD019) & 0x01, 0x00);
     }
+
+    #[test]
+    fn kernal_can_poll_with_bit_and_dispatch_through_indirect_jump() {
+        let mut c64 = Commodore64::new();
+        let mut kernal = vec![0; 0x2000];
+
+        kernal[0x0000..0x0018].copy_from_slice(&[
+            0xA9, 0x20, 0x8D, 0x30, 0x03, 0xA9, 0xE0, 0x8D, 0x31, 0x03, 0xA9, 0x80, 0x8D, 0x02,
+            0x04, 0x2C, 0x02, 0x04, 0x10, 0xF9, 0x6C, 0x30, 0x03, 0xEA,
+        ]);
+        kernal[0x0020..0x0026].copy_from_slice(&[0xA9, 0x0D, 0x8D, 0x04, 0x04, 0x00]);
+        kernal[0x1FFC] = 0x00;
+        kernal[0x1FFD] = 0xE0;
+
+        c64.load_rom(RomRegion::Kernal, &kernal).unwrap();
+        c64.reset();
+        c64.run_steps(32).unwrap();
+
+        assert!(c64.cpu.stopped);
+        assert_eq!(c64.peek_ram(0x0404), 0x0D);
+    }
 }
