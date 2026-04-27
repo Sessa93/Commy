@@ -4,6 +4,7 @@ use std::fmt;
 use crate::bus::{C64Bus, MemoryAccessError, RomLoadError, RomRegion};
 use crate::cia::CiaSnapshot;
 use crate::cpu::{Cpu6510, CpuError};
+use crate::joystick::JoystickState;
 use crate::sid::SidSnapshot;
 use crate::vic::RasterState;
 
@@ -118,6 +119,14 @@ impl Commodore64 {
         self.bus.set_key(row, column, pressed);
     }
 
+    pub fn set_joystick1(&mut self, state: JoystickState) {
+        self.bus.set_joystick1(state);
+    }
+
+    pub fn set_joystick2(&mut self, state: JoystickState) {
+        self.bus.set_joystick2(state);
+    }
+
     pub fn sid_snapshot(&self) -> SidSnapshot {
         self.bus.sid_snapshot()
     }
@@ -134,7 +143,7 @@ impl Commodore64 {
 #[cfg(test)]
 mod tests {
     use super::Commodore64;
-    use crate::{Bus, RomRegion};
+    use crate::{Bus, JoystickState, RomRegion};
 
     #[test]
     fn prg_load_sets_reset_vector_and_ram_contents() {
@@ -371,5 +380,28 @@ mod tests {
 
         assert!(c64.cpu.stopped);
         assert_eq!(c64.peek_ram(0x0405), 0x0E);
+    }
+
+    #[test]
+    fn kernal_can_poll_joystick_fire_on_cia1_port_a() {
+        let mut c64 = Commodore64::new();
+        let mut kernal = vec![0; 0x2000];
+        let mut joystick = JoystickState::new();
+
+        kernal[0x0000..0x0013].copy_from_slice(&[
+            0xAD, 0x00, 0xDC, 0x29, 0x10, 0xD0, 0xF9, 0xA9, 0x0F, 0x8D, 0x06, 0x04, 0x00, 0xEA,
+            0xEA, 0xEA, 0xEA, 0xEA, 0xEA,
+        ]);
+        kernal[0x1FFC] = 0x00;
+        kernal[0x1FFD] = 0xE0;
+
+        joystick.set_fire(true);
+        c64.load_rom(RomRegion::Kernal, &kernal).unwrap();
+        c64.set_joystick2(joystick);
+        c64.reset();
+        c64.run_steps(16).unwrap();
+
+        assert!(c64.cpu.stopped);
+        assert_eq!(c64.peek_ram(0x0406), 0x0F);
     }
 }

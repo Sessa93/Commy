@@ -27,6 +27,7 @@ Implemented now:
 - VIC-II raster IRQ generation into the CPU with KERNAL-side acknowledge and return via `RTI`
 - CIA timer countdown and SID voice phase stepping tied to the same bus tick path as the VIC-II
 - CIA1 keyboard matrix scanning through row/column reads on `$DC00/$DC01`
+- CIA1 joystick inputs on `$DC00/$DC01` with active-low directional and fire bits
 - ROM reset handlers that can execute directly from mapped KERNAL ROM bytes
 - CIA timer IRQ delivery into the CPU with KERNAL-side acknowledge and return via `RTI`
 - CIA2 timer-driven NMI delivery into the CPU, including edge-consumed NMI polling and KERNAL-side return via `RTI`
@@ -35,7 +36,7 @@ Not implemented yet:
 
 - VIC-II timing and rendering
 - SID audio
-- CIA joystick behavior and fuller port-direction/peripheral modeling
+- fuller CIA peripheral behavior beyond the current keyboard and joystick basics
 - exact cycle timing, illegal opcodes, cartridges, tape, disk, and full KERNAL/BASIC boot flow
 
 ## Usage

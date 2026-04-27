@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::cia::{Cia6526, CiaSnapshot};
+use crate::joystick::JoystickState;
 use crate::keyboard::KeyboardMatrix;
 use crate::sid::{Sid6581, SidSnapshot};
 use crate::vic::{RasterState, VicII};
@@ -82,6 +83,8 @@ pub struct C64Bus {
     sid: Sid6581,
     cia1: Cia6526,
     cia2: Cia6526,
+    joystick1: JoystickState,
+    joystick2: JoystickState,
     keyboard: KeyboardMatrix,
     cpu_port_ddr: u8,
     cpu_port: u8,
@@ -103,6 +106,8 @@ impl Default for C64Bus {
             sid: Sid6581::new(),
             cia1: Cia6526::new(),
             cia2: Cia6526::new(),
+            joystick1: JoystickState::new(),
+            joystick2: JoystickState::new(),
             keyboard: KeyboardMatrix::new(),
             cpu_port_ddr: 0x2F,
             cpu_port: 0x37,
@@ -177,6 +182,14 @@ impl C64Bus {
 
     pub fn set_key(&mut self, row: u8, column: u8, pressed: bool) {
         self.keyboard.set_key(row, column, pressed);
+    }
+
+    pub fn set_joystick1(&mut self, state: JoystickState) {
+        self.joystick1 = state;
+    }
+
+    pub fn set_joystick2(&mut self, state: JoystickState) {
+        self.joystick2 = state;
     }
 
     pub fn tick(&mut self, cycles: u8) {
@@ -267,12 +280,12 @@ impl C64Bus {
             0xD800..=0xDBFF => self.color_ram[(addr - 0xD800) as usize] & 0x0F,
             0xDC00 => {
                 let column_select = Self::cia_port_output_mask(&self.cia1, 0xDC01, 0xDC03);
-                let rows = self.keyboard.read_rows(column_select);
+                let rows = self.keyboard.read_rows(column_select) & self.joystick2.port_value();
                 Self::cia_port_input_value(&self.cia1, 0xDC00, 0xDC02, rows)
             }
             0xDC01 => {
                 let row_select = Self::cia_port_output_mask(&self.cia1, 0xDC00, 0xDC02);
-                let columns = self.keyboard.read_columns(row_select);
+                let columns = self.keyboard.read_columns(row_select) & self.joystick1.port_value();
                 Self::cia_port_input_value(&self.cia1, 0xDC01, 0xDC03, columns)
             }
             0xDC00..=0xDCFF => self.cia1.read(addr),
@@ -323,6 +336,7 @@ impl Bus for C64Bus {
 #[cfg(test)]
 mod tests {
     use super::{Bus, C64Bus, RomRegion};
+    use crate::JoystickState;
 
     #[test]
     fn basic_rom_is_visible_only_when_banked_in() {
@@ -415,5 +429,15 @@ mod tests {
         bus.write(0xDC02, 0xFF);
 
         assert_eq!(bus.read(0xDC01), 0xFB);
+    }
+
+    #[test]
+    fn joystick2_fire_pulls_cia1_port_a_low() {
+        let mut bus = C64Bus::new();
+        let mut joystick = JoystickState::new();
+        joystick.set_fire(true);
+        bus.set_joystick2(joystick);
+
+        assert_eq!(bus.read(0xDC00), 0xEF);
     }
 }
