@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::cia::{Cia6526, CiaSnapshot};
+use crate::keyboard::KeyboardMatrix;
 use crate::sid::{Sid6581, SidSnapshot};
 use crate::vic::{RasterState, VicII};
 
@@ -81,6 +82,7 @@ pub struct C64Bus {
     sid: Sid6581,
     cia1: Cia6526,
     cia2: Cia6526,
+    keyboard: KeyboardMatrix,
     cpu_port_ddr: u8,
     cpu_port: u8,
 }
@@ -101,6 +103,7 @@ impl Default for C64Bus {
             sid: Sid6581::new(),
             cia1: Cia6526::new(),
             cia2: Cia6526::new(),
+            keyboard: KeyboardMatrix::new(),
             cpu_port_ddr: 0x2F,
             cpu_port: 0x37,
         }
@@ -170,6 +173,10 @@ impl C64Bus {
 
     pub fn set_cpu_port(&mut self, value: u8) {
         self.cpu_port = value;
+    }
+
+    pub fn set_key(&mut self, row: u8, column: u8, pressed: bool) {
+        self.keyboard.set_key(row, column, pressed);
     }
 
     pub fn tick(&mut self, cycles: u8) {
@@ -246,6 +253,8 @@ impl C64Bus {
             0xD000..=0xD3FF => self.vic.read(addr),
             0xD400..=0xD7FF => self.sid.read(addr),
             0xD800..=0xDBFF => self.color_ram[(addr - 0xD800) as usize] & 0x0F,
+            0xDC00 => self.cia1.read(addr) & self.keyboard.read_rows(self.cia1.read(0xDC01)),
+            0xDC01 => self.cia1.read(addr) & self.keyboard.read_columns(self.cia1.read(0xDC00)),
             0xDC00..=0xDCFF => self.cia1.read(addr),
             0xDD00..=0xDDFF => self.cia2.read(addr),
             _ => self.ram[addr as usize],
@@ -267,8 +276,8 @@ impl C64Bus {
 impl Bus for C64Bus {
     fn read(&mut self, addr: u16) -> u8 {
         match addr {
-            0xDC00..=0xDCFF if self.io_visible() => self.cia1.read_mut(addr),
-            0xDD00..=0xDDFF if self.io_visible() => self.cia2.read_mut(addr),
+            0xDC0D if self.io_visible() => self.cia1.read_mut(addr),
+            0xDD0D if self.io_visible() => self.cia2.read_mut(addr),
             _ => self.read_internal(addr),
         }
     }
@@ -363,5 +372,14 @@ mod tests {
 
         assert_eq!(bus.sid_snapshot().total_cycles, 2);
         assert_eq!(bus.sid_snapshot().voice_phase[0], 0x1234 * 2);
+    }
+
+    #[test]
+    fn cia1_port_b_reflects_pressed_key_for_selected_row() {
+        let mut bus = C64Bus::new();
+        bus.set_key(0, 2, true);
+        bus.write(0xDC00, 0xFE);
+
+        assert_eq!(bus.read(0xDC01), 0xFB);
     }
 }

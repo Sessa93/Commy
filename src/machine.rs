@@ -114,6 +114,10 @@ impl Commodore64 {
         self.bus.current_reset_vector()
     }
 
+    pub fn set_key(&mut self, row: u8, column: u8, pressed: bool) {
+        self.bus.set_key(row, column, pressed);
+    }
+
     pub fn sid_snapshot(&self) -> SidSnapshot {
         self.bus.sid_snapshot()
     }
@@ -345,5 +349,26 @@ mod tests {
 
         assert!(c64.cpu.stopped);
         assert_eq!(c64.peek_ram(0x0404), 0x0D);
+    }
+
+    #[test]
+    fn kernal_can_scan_keyboard_matrix_via_cia1_ports() {
+        let mut c64 = Commodore64::new();
+        let mut kernal = vec![0; 0x2000];
+
+        kernal[0x0000..0x0013].copy_from_slice(&[
+            0xA9, 0xFE, 0x8D, 0x00, 0xDC, 0xAD, 0x01, 0xDC, 0x29, 0x04, 0xD0, 0xF7, 0xA9, 0x0E,
+            0x8D, 0x05, 0x04, 0x00, 0xEA,
+        ]);
+        kernal[0x1FFC] = 0x00;
+        kernal[0x1FFD] = 0xE0;
+
+        c64.load_rom(RomRegion::Kernal, &kernal).unwrap();
+        c64.set_key(0, 2, true);
+        c64.reset();
+        c64.run_steps(24).unwrap();
+
+        assert!(c64.cpu.stopped);
+        assert_eq!(c64.peek_ram(0x0405), 0x0E);
     }
 }

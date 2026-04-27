@@ -26,6 +26,7 @@ Implemented now:
 - VIC-II raster stepping and a text-mode screen snapshot sourced from screen RAM
 - VIC-II raster IRQ generation into the CPU with KERNAL-side acknowledge and return via `RTI`
 - CIA timer countdown and SID voice phase stepping tied to the same bus tick path as the VIC-II
+- CIA1 keyboard matrix scanning through row/column reads on `$DC00/$DC01`
 - ROM reset handlers that can execute directly from mapped KERNAL ROM bytes
 - CIA timer IRQ delivery into the CPU with KERNAL-side acknowledge and return via `RTI`
 - CIA2 timer-driven NMI delivery into the CPU, including edge-consumed NMI polling and KERNAL-side return via `RTI`

@@ -25,8 +25,12 @@ pub struct Cia6526 {
 
 impl Default for Cia6526 {
     fn default() -> Self {
+        let mut registers = [0; 0x10];
+        registers[0x00] = 0xFF;
+        registers[0x01] = 0xFF;
+
         Self {
-            registers: [0; 0x10],
+            registers,
             timer_a_latch: 0,
             timer_b_latch: 0,
             timer_a_counter: 0,
