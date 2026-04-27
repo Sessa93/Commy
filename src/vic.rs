@@ -3,6 +3,7 @@ const SCREEN_ROWS: usize = 25;
 const SCREEN_RAM_BASE: usize = 0x0400;
 const CYCLES_PER_RASTER_LINE: u16 = 63;
 const RASTER_LINES_PER_FRAME: u16 = 312;
+const IRQ_RASTER: u8 = 0x01;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RasterState {
@@ -17,6 +18,10 @@ pub struct VicII {
     raster_line: u16,
     cycle_in_line: u16,
     frame_count: u64,
+    raster_irq_line: u16,
+    irq_enable: u8,
+    irq_status: u8,
+    irq_pending: bool,
 }
 
 impl Default for VicII {
@@ -26,6 +31,10 @@ impl Default for VicII {
             raster_line: 0,
             cycle_in_line: 0,
             frame_count: 0,
+            raster_irq_line: 0,
+            irq_enable: 0,
+            irq_status: 0,
+            irq_pending: false,
         };
         vic.sync_raster_registers();
         vic
@@ -38,17 +47,34 @@ impl VicII {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        self.registers[addr as usize & 0x3F]
+        match addr as usize & 0x3F {
+            0x11 => (self.registers[0x11] & 0x7F) | ((self.raster_line >> 1) as u8 & 0x80),
+            0x12 => self.raster_line as u8,
+            0x19 => self.irq_status | if self.irq_pending { 0x80 } else { 0x00 },
+            0x1A => self.irq_enable,
+            index => self.registers[index],
+        }
     }
 
     pub fn write(&mut self, addr: u16, value: u8) {
         let index = addr as usize & 0x3F;
-        self.registers[index] = value;
-
-        if index == 0x11 {
-            self.registers[index] = (self.registers[index] & 0x7F) | ((self.raster_line >> 1) as u8 & 0x80);
-        } else if index == 0x12 {
-            self.sync_raster_registers();
+        match index {
+            0x11 => {
+                self.registers[index] = value & 0x7F;
+                self.raster_irq_line = (self.raster_irq_line & 0x00FF) | (((value as u16) & 0x80) << 1);
+            }
+            0x12 => {
+                self.raster_irq_line = (self.raster_irq_line & 0x0100) | value as u16;
+            }
+            0x19 => {
+                self.irq_status &= !(value & 0x0F);
+                self.update_irq_pending();
+            }
+            0x1A => {
+                self.irq_enable = value & 0x0F;
+                self.update_irq_pending();
+            }
+            _ => self.registers[index] = value,
         }
     }
 
@@ -63,9 +89,15 @@ impl VicII {
                 self.raster_line = 0;
                 self.frame_count += 1;
             }
+
+            self.check_raster_irq();
         }
 
         self.sync_raster_registers();
+    }
+
+    pub fn irq_pending(&self) -> bool {
+        self.irq_pending
     }
 
     pub fn raster_state(&self) -> RasterState {
@@ -96,7 +128,17 @@ impl VicII {
 
     fn sync_raster_registers(&mut self) {
         self.registers[0x12] = self.raster_line as u8;
-        self.registers[0x11] = (self.registers[0x11] & 0x7F) | ((self.raster_line >> 1) as u8 & 0x80);
+    }
+
+    fn check_raster_irq(&mut self) {
+        if self.raster_line == self.raster_irq_line {
+            self.irq_status |= IRQ_RASTER;
+            self.update_irq_pending();
+        }
+    }
+
+    fn update_irq_pending(&mut self) {
+        self.irq_pending = self.irq_status & self.irq_enable != 0;
     }
 }
 
@@ -141,5 +183,21 @@ mod tests {
         let first_line = screen.lines().next().unwrap();
 
         assert_eq!(&first_line[..5], "HELLO");
+    }
+
+    #[test]
+    fn raster_irq_latches_and_clears_via_registers() {
+        let mut vic = VicII::new();
+        vic.write(0xD012, 0x01);
+        vic.write(0xD01A, 0x01);
+
+        vic.tick(63);
+
+        assert!(vic.irq_pending());
+        assert_eq!(vic.read(0xD019), 0x81);
+
+        vic.write(0xD019, 0x01);
+        assert!(!vic.irq_pending());
+        assert_eq!(vic.read(0xD019), 0x00);
     }
 }

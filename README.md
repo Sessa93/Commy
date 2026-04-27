@@ -24,6 +24,7 @@ Implemented now:
 - BASIC, KERNAL, and character ROM slots
 - C64 banking switches via the 6510 CPU port at `$0001`
 - VIC-II raster stepping and a text-mode screen snapshot sourced from screen RAM
+- VIC-II raster IRQ generation into the CPU with KERNAL-side acknowledge and return via `RTI`
 - CIA timer countdown and SID voice phase stepping tied to the same bus tick path as the VIC-II
 - ROM reset handlers that can execute directly from mapped KERNAL ROM bytes
 - CIA timer IRQ delivery into the CPU with KERNAL-side acknowledge and return via `RTI`
@@ -68,5 +69,5 @@ The CLI prints CPU state, the active reset vector, VIC raster position, CIA1 IRQ
 
 1. Expand opcode coverage and addressing modes until larger KERNAL and BASIC routines run without unsupported opcodes.
 2. Flesh out the VIC-II beyond raster counters and text snapshots, then add real CIA keyboard/joystick behavior and SID waveform/envelope generation.
-3. Refine the shared timing model from simple per-instruction ticking toward cycle-accurate coordination and richer interrupt sources.
+3. Refine the shared timing model from simple per-instruction ticking toward cycle-accurate coordination and more complete VIC/CIA interrupt behavior.
 4. Boot through real ROMs far enough to reach a recognizable KERNAL/BASIC startup path instead of only smoke-tested reset, IRQ, and NMI handlers.

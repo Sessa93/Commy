@@ -283,7 +283,7 @@ impl Bus for C64Bus {
     }
 
     fn poll_irq(&mut self) -> bool {
-        self.cia1.irq_pending()
+        self.cia1.irq_pending() || self.vic.irq_pending()
     }
 
     fn poll_nmi(&mut self) -> bool {
