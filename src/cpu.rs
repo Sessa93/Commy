@@ -652,6 +652,16 @@ impl Cpu6510 {
                 self.compare(self.y, value);
                 2
             }
+            0xC1 => {
+                let addr = self.fetch_indexed_indirect_addr(bus);
+                self.compare(self.a, bus.read(addr));
+                6
+            }
+            0xC4 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.compare(self.y, bus.read(addr));
+                3
+            }
             0xC5 => {
                 let addr = self.fetch_zero_page_addr(bus);
                 self.compare(self.a, bus.read(addr));
@@ -679,6 +689,11 @@ impl Cpu6510 {
                 self.set_zn(self.x);
                 2
             }
+            0xCC => {
+                let addr = self.fetch_word(bus);
+                self.compare(self.y, bus.read(addr));
+                4
+            }
             0xCD => {
                 let addr = self.fetch_word(bus);
                 self.compare(self.a, bus.read(addr));
@@ -692,14 +707,39 @@ impl Cpu6510 {
                 6
             }
             0xD0 => self.branch(bus, self.status & FLAG_ZERO == 0),
+            0xD1 => {
+                let addr = self.fetch_indirect_indexed_addr(bus);
+                self.compare(self.a, bus.read(addr));
+                5
+            }
+            0xD5 => {
+                let addr = self.fetch_zero_page_x_addr(bus);
+                self.compare(self.a, bus.read(addr));
+                4
+            }
             0xD8 => {
                 self.set_flag(FLAG_DECIMAL, false);
                 2
+            }
+            0xD9 => {
+                let addr = self.fetch_absolute_y_addr(bus);
+                self.compare(self.a, bus.read(addr));
+                4
+            }
+            0xDD => {
+                let addr = self.fetch_absolute_x_addr(bus);
+                self.compare(self.a, bus.read(addr));
+                4
             }
             0xE0 => {
                 let value = self.fetch_byte(bus);
                 self.compare(self.x, value);
                 2
+            }
+            0xE4 => {
+                let addr = self.fetch_zero_page_addr(bus);
+                self.compare(self.x, bus.read(addr));
+                3
             }
             0xE1 => {
                 let addr = self.fetch_indexed_indirect_addr(bus);
@@ -729,6 +769,11 @@ impl Cpu6510 {
                 2
             }
             0xEA => 2,
+            0xEC => {
+                let addr = self.fetch_word(bus);
+                self.compare(self.x, bus.read(addr));
+                4
+            }
             0xED => {
                 let addr = self.fetch_word(bus);
                 self.sbc(bus.read(addr));
@@ -1366,6 +1411,79 @@ mod tests {
         assert_ne!(cpu.status & super::FLAG_CARRY, 0);
         assert_ne!(cpu.status & FLAG_ZERO, 0);
         assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn cmp_supports_indexed_absolute_and_indirect_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(
+            0x8000,
+            &[
+                0xA2, 0x04, 0xA0, 0x01, 0xA9, 0x20, 0xC1, 0x20, 0xD5, 0x0D, 0xDD, 0xFC, 0x1F,
+                0xD9, 0xFF, 0x2F, 0xD1, 0x30, 0x00,
+            ],
+        );
+        bus.memory[0x0011] = 0x1F;
+        bus.memory[0x2000] = 0x20;
+        bus.memory[0x3000] = 0x21;
+        bus.memory[0x0024] = 0x00;
+        bus.memory[0x0025] = 0x40;
+        bus.memory[0x0030] = 0xFF;
+        bus.memory[0x0031] = 0x4F;
+        bus.memory[0x4000] = 0x10;
+        bus.memory[0x5000] = 0x20;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_ne!(cpu.status & super::FLAG_CARRY, 0);
+        assert_ne!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn cpx_supports_zero_page_and_absolute_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA2, 0x30, 0xE4, 0x10, 0xEC, 0x00, 0x20, 0x00]);
+        bus.memory[0x0010] = 0x10;
+        bus.memory[0x2000] = 0x30;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_ne!(cpu.status & super::FLAG_CARRY, 0);
+        assert_ne!(cpu.status & FLAG_ZERO, 0);
+        assert_eq!(cpu.status & FLAG_NEGATIVE, 0);
+    }
+
+    #[test]
+    fn cpy_supports_zero_page_and_absolute_forms() {
+        let mut bus = TestBus::new();
+        bus.set_reset_vector(0x8000);
+        bus.load(0x8000, &[0xA0, 0x20, 0xC4, 0x11, 0xCC, 0x01, 0x20, 0x00]);
+        bus.memory[0x0011] = 0x10;
+        bus.memory[0x2001] = 0x21;
+
+        let mut cpu = Cpu6510::new();
+        cpu.reset(&mut bus);
+
+        while !cpu.stopped {
+            cpu.step(&mut bus).unwrap();
+        }
+
+        assert_eq!(cpu.status & super::FLAG_CARRY, 0);
+        assert_eq!(cpu.status & FLAG_ZERO, 0);
+        assert_ne!(cpu.status & FLAG_NEGATIVE, 0);
     }
 
     #[test]
